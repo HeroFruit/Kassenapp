@@ -1,5 +1,6 @@
 package de.tfc.kassenapp.ui
 
+import android.content.res.Configuration
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -53,6 +54,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -77,46 +79,93 @@ fun KassenAppScreen(
     var itemForContextMenu by remember { mutableStateOf<CatalogItem?>(null) }
     var itemToDeleteConfirm by remember { mutableStateOf<CatalogItem?>(null) }
 
+    val configuration = LocalConfiguration.current
+    val isPortrait = configuration.orientation == Configuration.ORIENTATION_PORTRAIT
+
     Scaffold(
         modifier = modifier
     ) { innerPadding ->
-        Row(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-        ) {
-            // Linkes 2/3 des Bildschirms: Grid mit Item-Quadraten
-            Box(
+        if (isPortrait) {
+            // Vertikales Layout für Smartphone im Hochformat (Portrait)
+            Column(
                 modifier = Modifier
-                    .weight(2f)
-                    .fillMaxHeight()
-                    .padding(8.dp)
+                    .fillMaxSize()
+                    .padding(innerPadding)
             ) {
-                CatalogGridSection(
-                    items = viewModel.catalogItems,
-                    onItemClick = { item -> viewModel.addToCart(item) },
-                    onItemLongClick = { item -> itemForContextMenu = item },
-                    onAddNewItemClick = { showAddItemDialog = true }
-                )
+                // Oben: Grid mit Artikel-Quadraten
+                Box(
+                    modifier = Modifier
+                        .weight(1.2f)
+                        .fillMaxWidth()
+                        .padding(8.dp)
+                ) {
+                    CatalogGridSection(
+                        items = viewModel.catalogItems,
+                        onItemClick = { item -> viewModel.addToCart(item) },
+                        onItemLongClick = { item -> itemForContextMenu = item },
+                        onAddNewItemClick = { showAddItemDialog = true }
+                    )
+                }
+
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
+                // Unten: Warenkorb & Gesamtpreis
+                Surface(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                ) {
+                    CartSection(
+                        cartItems = viewModel.cartItems,
+                        totalPrice = viewModel.totalPrice,
+                        onAddOne = { cartItem -> viewModel.addToCart(cartItem.item) },
+                        onRemoveOne = { cartItem -> viewModel.removeFromCart(cartItem) },
+                        onRemoveEntireLine = { cartItem -> viewModel.removeEntireLineFromCart(cartItem) },
+                        onClearCart = { viewModel.clearCart() }
+                    )
+                }
             }
-
-            VerticalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-
-            // Rechtes 1/3 des Bildschirms: Liste der hinzugefügten Items & Gesamtpreis
-            Surface(
+        } else {
+            // Horizontales Layout für Querformat (Landscape) / Tablets
+            Row(
                 modifier = Modifier
-                    .weight(1f)
-                    .fillMaxHeight(),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                    .fillMaxSize()
+                    .padding(innerPadding)
             ) {
-                CartSection(
-                    cartItems = viewModel.cartItems,
-                    totalPrice = viewModel.totalPrice,
-                    onAddOne = { cartItem -> viewModel.addToCart(cartItem.item) },
-                    onRemoveOne = { cartItem -> viewModel.removeFromCart(cartItem) },
-                    onRemoveEntireLine = { cartItem -> viewModel.removeEntireLineFromCart(cartItem) },
-                    onClearCart = { viewModel.clearCart() }
-                )
+                // Linkes 2/3 des Bildschirms: Grid mit Artikel-Quadraten
+                Box(
+                    modifier = Modifier
+                        .weight(2f)
+                        .fillMaxHeight()
+                        .padding(8.dp)
+                ) {
+                    CatalogGridSection(
+                        items = viewModel.catalogItems,
+                        onItemClick = { item -> viewModel.addToCart(item) },
+                        onItemLongClick = { item -> itemForContextMenu = item },
+                        onAddNewItemClick = { showAddItemDialog = true }
+                    )
+                }
+
+                VerticalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
+                // Rechtes 1/3 des Bildschirms: Warenkorb & Gesamtpreis
+                Surface(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight(),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                ) {
+                    CartSection(
+                        cartItems = viewModel.cartItems,
+                        totalPrice = viewModel.totalPrice,
+                        onAddOne = { cartItem -> viewModel.addToCart(cartItem.item) },
+                        onRemoveOne = { cartItem -> viewModel.removeFromCart(cartItem) },
+                        onRemoveEntireLine = { cartItem -> viewModel.removeEntireLineFromCart(cartItem) },
+                        onClearCart = { viewModel.clearCart() }
+                    )
+                }
             }
         }
     }
@@ -401,7 +450,7 @@ fun CartSection(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "Warenkorb ist leer\nKlicke links auf einen Artikel",
+                    text = "Warenkorb ist leer\nKlicke oben/links auf einen Artikel",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center
@@ -431,16 +480,18 @@ fun CartSection(
             ),
             modifier = Modifier.fillMaxWidth()
         ) {
-            Column(
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(12.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
                     text = "Gesamtpreis",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f)
                 )
                 Text(
                     text = formatPrice(totalPrice),
@@ -474,7 +525,11 @@ fun CartItemRow(
                 .padding(horizontal = 8.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(modifier = Modifier.weight(1f)) {
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(end = 4.dp)
+            ) {
                 Text(
                     text = "${cartItem.quantity}x ${cartItem.item.name}",
                     style = MaterialTheme.typography.bodyMedium,
@@ -496,7 +551,10 @@ fun CartItemRow(
                 modifier = Modifier.padding(horizontal = 4.dp)
             )
 
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
                 IconButton(
                     onClick = onRemoveOne,
                     modifier = Modifier.size(28.dp)

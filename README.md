@@ -3,7 +3,7 @@
 Eine moderne, effiziente und benutzerfreundliche Kassenanwendung für Android, entwickelt mit Jetpack Compose.
 
 ## 📝 Projektbeschreibung
-Kassenapp ist eine Android-basierte App, die entwickelt wurde, um den einfachen Kaffee/Kuchen verkauf zu vereinfachen. Sie bietet eine intuitive Benutzeroberfläche zur schnellen Artikelwahl, Verwaltung des Warenkorbs, Abwicklung von Verkäufen sowie zur Überwachung von Umsätzen und Statistiken.
+Kassenapp ist eine Android-basierte App, die entwickelt wurde, um den Kaffee/Kuchen verkauf zu vereinfachen. Sie bietet eine intuitive Benutzeroberfläche zur schnellen Artikelwahl, Verwaltung des Warenkorbs, Abwicklung von Verkäufen sowie zur Überwachung von Umsätzen und Statistiken.
 
 ## ✨ Hauptfunktionen
 

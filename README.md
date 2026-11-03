@@ -2,10 +2,10 @@ Kleine Kassenapp mithilfe von KI geschrieben.
 
 # Kassenapp 🛒
 
-Willkommen bei **Kassenapp** – einer effizienten und benutzerfreundlichen Point-of-Sale (POS) Anwendung, die speziell für kleine Unternehmen und Läden entwickelt wurde, um den Verkaufsprozess zu vereinfachen und zu digitalisieren.
+Willkommen bei **Kassenapp** – einer effizienten und benutzerfreundlichen Anwendung.
 
 ## 📝 Projektbeschreibung
-Kassenapp ist eine Android-basierte Anwendung, die es Ladenbesitzern ermöglicht, Produkte zu verwalten, Verkäufe in Echtzeit abzuwickeln und einen Überblick über den aktuellen Bestand sowie den Tagesumsatz zu behalten. Die App ist auf Schnelligkeit und intuitive Bedienung optimiert.
+Kassenapp ist eine Android-basierte Anwendung, die es ermöglicht, Produkte zu verwalten, Verkäufe in Echtzeit abzuwickeln und einen Überblick über den aktuellen Tagesumsatz zu behalten. Die App ist auf Schnelligkeit und intuitive Bedienung optimiert.
 
 ## ✨ Hauptfunktionen
 

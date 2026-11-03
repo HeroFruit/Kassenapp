@@ -10,17 +10,11 @@ Kassenapp ist eine Android-basierte Anwendung, die es Ladenbesitzern ermöglicht
 ## ✨ Hauptfunktionen
 
 ### 1. Produktverwaltung
-*   **Artikel anlegen:** Schnelles Hinzufügen von Produkten mit Name, Preis, Kategorie und Bild.
-*   **Bestandsführung:** Automatisches Abziehen von Mengen bei jedem Verkauf und Benachrichtigung bei niedrigem Lagerbestand.
-*   **Kategorisierung:** Ordne Produkte verschiedenen Gruppen zu (z.B. Lebensmittel, Getränke, Elektronik).
+*   **Artikel anlegen:** Schnelles Hinzufügen von Produkten mit Name, Preis.
 
 ### 2. Verkaufsprozess (Checkout)
 *   **Warenkorb-System:** Produkte einfach auswählen und in einen virtuellen Warenkorb legen.
-*   **Echtzeit-Berechnung:** Automatische Berechnung von Zwischensummen, Steuern und Gesamtkosten.
-*   **Beleg-Generierung:** Erstellung einer digitalen Zusammenfassung für den Kunden (optional: Export als PDF/Text).
-*   **Barzahlung & Karte:** Auswahl verschiedener Zahlungsmethoden.
 
 ### 3. Berichterstattung & Analyse
-*   **Umsatzübersicht:** Siehe, wie viel Umsatz pro Tag, Woche oder Monat generiert wurde.
-*   **Bestseller-Statistik:** Identifiziere deine meistverkauften Produkte auf einen Blick.
-*   **Inventarbericht:** Überblick über den aktuellen Wert des Lagers.
+*   **Umsatzübersicht:** Siehe, wie viel Umsatz pro Tag generiert wurde.
+

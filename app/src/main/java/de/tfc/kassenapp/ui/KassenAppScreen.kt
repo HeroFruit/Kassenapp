@@ -5,6 +5,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -23,29 +24,41 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.VerticalDivider
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -54,19 +67,90 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import de.tfc.kassenapp.model.CartItem
 import de.tfc.kassenapp.model.CatalogItem
+import de.tfc.kassenapp.model.ThemeMode
+import de.tfc.kassenapp.model.Transaction
 import de.tfc.kassenapp.viewmodel.KassenViewModel
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
+
+private val RedButtonColor = Color(0xFFD32F2F)
+private val RedButtonTextColor = Color.White
+
+data class DailyArticleSummary(
+    val articleName: String,
+    val totalQuantity: Int,
+    val totalRevenue: Double
+)
+
+data class DailySalesSummary(
+    val dateString: String,
+    val dayTimestamp: Long,
+    val articles: List<DailyArticleSummary>,
+    val dayTotalRevenue: Double,
+    val dayTotalQuantity: Int
+)
 
 fun formatPrice(price: Double): String {
     return String.format(Locale.GERMAN, "%.2f €", price)
+}
+
+fun formatTimestamp(timestamp: Long): String {
+    val sdf = SimpleDateFormat("dd.MM.yyyy HH:mm:ss", Locale.GERMAN)
+    return sdf.format(Date(timestamp))
+}
+
+fun getDailySalesSummaries(transactions: List<Transaction>): List<DailySalesSummary> {
+    val dateFormat = SimpleDateFormat("dd.MM.yyyy", Locale.GERMAN)
+
+    val groupedByDay = transactions.groupBy { tx ->
+        dateFormat.format(Date(tx.timestamp))
+    }
+
+    return groupedByDay.map { (dateStr, dayTxList) ->
+        val articleMap = mutableMapOf<String, Pair<Int, Double>>()
+
+        for (tx in dayTxList) {
+            for (item in tx.items) {
+                val current = articleMap.getOrDefault(item.name, Pair(0, 0.0))
+                val newQty = current.first + item.quantity
+                val newRev = current.second + (item.price * item.quantity)
+                articleMap[item.name] = Pair(newQty, newRev)
+            }
+        }
+
+        val articleSummaries = articleMap.map { (name, pair) ->
+            DailyArticleSummary(
+                articleName = name,
+                totalQuantity = pair.first,
+                totalRevenue = pair.second
+            )
+        }.sortedByDescending { it.totalQuantity }
+
+        val dayTotalRev = dayTxList.sumOf { it.totalAmount }
+        val dayTotalQty = articleSummaries.sumOf { it.totalQuantity }
+        val maxTimestamp = dayTxList.maxOfOrNull { it.timestamp } ?: 0L
+
+        DailySalesSummary(
+            dateString = dateStr,
+            dayTimestamp = maxTimestamp,
+            articles = articleSummaries,
+            dayTotalRevenue = dayTotalRev,
+            dayTotalQuantity = dayTotalQty
+        )
+    }.sortedByDescending { it.dayTimestamp }
 }
 
 @Composable
@@ -79,6 +163,11 @@ fun KassenAppScreen(
     var itemForContextMenu by remember { mutableStateOf<CatalogItem?>(null) }
     var itemToDeleteConfirm by remember { mutableStateOf<CatalogItem?>(null) }
 
+    var showSideMenu by remember { mutableStateOf(false) }
+    var showStatisticsDialog by remember { mutableStateOf(false) }
+    var showClearArticlesConfirm by remember { mutableStateOf(false) }
+    var showClearStatisticsConfirm by remember { mutableStateOf(false) }
+
     val configuration = LocalConfiguration.current
     val isPortrait = configuration.orientation == Configuration.ORIENTATION_PORTRAIT
 
@@ -86,13 +175,11 @@ fun KassenAppScreen(
         modifier = modifier
     ) { innerPadding ->
         if (isPortrait) {
-            // Vertikales Layout für Smartphone im Hochformat (Portrait)
             Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding)
             ) {
-                // Oben: Grid mit Artikel-Quadraten
                 Box(
                     modifier = Modifier
                         .weight(1.2f)
@@ -101,15 +188,16 @@ fun KassenAppScreen(
                 ) {
                     CatalogGridSection(
                         items = viewModel.catalogItems,
+                        articleSquareScale = viewModel.articleSquareScale,
                         onItemClick = { item -> viewModel.addToCart(item) },
                         onItemLongClick = { item -> itemForContextMenu = item },
-                        onAddNewItemClick = { showAddItemDialog = true }
+                        onAddNewItemClick = { showAddItemDialog = true },
+                        onOpenSideMenu = { showSideMenu = true }
                     )
                 }
 
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
-                // Unten: Warenkorb & Gesamtpreis
                 Surface(
                     modifier = Modifier
                         .weight(1f)
@@ -122,18 +210,16 @@ fun KassenAppScreen(
                         onAddOne = { cartItem -> viewModel.addToCart(cartItem.item) },
                         onRemoveOne = { cartItem -> viewModel.removeFromCart(cartItem) },
                         onRemoveEntireLine = { cartItem -> viewModel.removeEntireLineFromCart(cartItem) },
-                        onClearCart = { viewModel.clearCart() }
+                        onCheckoutNextCustomer = { viewModel.checkoutNextCustomer() }
                     )
                 }
             }
         } else {
-            // Horizontales Layout für Querformat (Landscape) / Tablets
             Row(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding)
             ) {
-                // Linkes 2/3 des Bildschirms: Grid mit Artikel-Quadraten
                 Box(
                     modifier = Modifier
                         .weight(2f)
@@ -142,15 +228,16 @@ fun KassenAppScreen(
                 ) {
                     CatalogGridSection(
                         items = viewModel.catalogItems,
+                        articleSquareScale = viewModel.articleSquareScale,
                         onItemClick = { item -> viewModel.addToCart(item) },
                         onItemLongClick = { item -> itemForContextMenu = item },
-                        onAddNewItemClick = { showAddItemDialog = true }
+                        onAddNewItemClick = { showAddItemDialog = true },
+                        onOpenSideMenu = { showSideMenu = true }
                     )
                 }
 
                 VerticalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
-                // Rechtes 1/3 des Bildschirms: Warenkorb & Gesamtpreis
                 Surface(
                     modifier = Modifier
                         .weight(1f)
@@ -163,14 +250,95 @@ fun KassenAppScreen(
                         onAddOne = { cartItem -> viewModel.addToCart(cartItem.item) },
                         onRemoveOne = { cartItem -> viewModel.removeFromCart(cartItem) },
                         onRemoveEntireLine = { cartItem -> viewModel.removeEntireLineFromCart(cartItem) },
-                        onClearCart = { viewModel.clearCart() }
+                        onCheckoutNextCustomer = { viewModel.checkoutNextCustomer() }
                     )
                 }
             }
         }
     }
 
-    // Dialog: Neuen Artikel hinzufügen (Name und Preis Feld)
+    // Seitenmenü Sheet
+    if (showSideMenu) {
+        SideMenuSheet(
+            themeMode = viewModel.themeMode,
+            uiScale = viewModel.uiScale,
+            articleSquareScale = viewModel.articleSquareScale,
+            onThemeModeChange = { viewModel.updateThemeMode(it) },
+            onUiScaleChange = { viewModel.updateUiScale(it) },
+            onArticleSquareScaleChange = { viewModel.updateArticleSquareScale(it) },
+            onOpenStatistics = { showStatisticsDialog = true },
+            onClearArticlesClick = { showClearArticlesConfirm = true },
+            onClearStatisticsClick = { showClearStatisticsConfirm = true },
+            onDismiss = { showSideMenu = false }
+        )
+    }
+
+    // Vollbild Statistik Fenster
+    if (showStatisticsDialog) {
+        StatisticsDialog(
+            transactions = viewModel.transactions,
+            totalRevenue = viewModel.totalRevenue,
+            onDismiss = { showStatisticsDialog = false }
+        )
+    }
+
+    // Bestätigung: Artikel-Datenbank leeren
+    if (showClearArticlesConfirm) {
+        AlertDialog(
+            onDismissRequest = { showClearArticlesConfirm = false },
+            title = { Text("Artikel-Datenbank leeren") },
+            text = { Text("Möchten Sie wirklich alle Artikel aus der Datenbank löschen? Dies kann nicht rückgängig gemacht werden.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.clearArticleDatabase()
+                        showClearArticlesConfirm = false
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = RedButtonColor,
+                        contentColor = RedButtonTextColor
+                    )
+                ) {
+                    Text("Artikel leeren", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { showClearArticlesConfirm = false }) {
+                    Text("Abbrechen")
+                }
+            }
+        )
+    }
+
+    // Bestätigung: Statistik-Datenbank leeren
+    if (showClearStatisticsConfirm) {
+        AlertDialog(
+            onDismissRequest = { showClearStatisticsConfirm = false },
+            title = { Text("Statistik-Datenbank leeren") },
+            text = { Text("Möchten Sie wirklich die gesamte Statistik und alle Verkaufsdaten löschen? Dies kann nicht rückgängig gemacht werden.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.clearStatisticsDatabase()
+                        showClearStatisticsConfirm = false
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = RedButtonColor,
+                        contentColor = RedButtonTextColor
+                    )
+                ) {
+                    Text("Statistik leeren", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { showClearStatisticsConfirm = false }) {
+                    Text("Abbrechen")
+                }
+            }
+        )
+    }
+
+    // Dialog: Neuen Artikel hinzufügen
     if (showAddItemDialog) {
         AddEditItemDialog(
             title = "Neuen Artikel hinzufügen",
@@ -184,7 +352,7 @@ fun KassenAppScreen(
         )
     }
 
-    // Dialog: Artikel bearbeiten (Name und Preis Feld)
+    // Dialog: Artikel bearbeiten
     itemToEdit?.let { targetItem ->
         AddEditItemDialog(
             title = "Artikel bearbeiten",
@@ -198,7 +366,7 @@ fun KassenAppScreen(
         )
     }
 
-    // Menü aufrufen bei langem Drücken auf ein Artikelquadrat (Bearbeiten oder Löschen)
+    // Menü aufrufen bei langem Drücken auf ein Artikelquadrat
     itemForContextMenu?.let { targetItem ->
         AlertDialog(
             onDismissRequest = { itemForContextMenu = null },
@@ -222,7 +390,7 @@ fun KassenAppScreen(
                         itemToDeleteConfirm = targetItem
                         itemForContextMenu = null
                     },
-                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                    colors = ButtonDefaults.textButtonColors(contentColor = RedButtonColor)
                 ) {
                     Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(4.dp))
@@ -232,7 +400,7 @@ fun KassenAppScreen(
         )
     }
 
-    // Bestätigung zum Löschen
+    // Bestätigung zum Einzel-Löschen
     itemToDeleteConfirm?.let { targetItem ->
         AlertDialog(
             onDismissRequest = { itemToDeleteConfirm = null },
@@ -244,9 +412,12 @@ fun KassenAppScreen(
                         viewModel.deleteCatalogItem(targetItem)
                         itemToDeleteConfirm = null
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = RedButtonColor,
+                        contentColor = RedButtonTextColor
+                    )
                 ) {
-                    Text("Löschen")
+                    Text("Löschen", fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
@@ -261,9 +432,11 @@ fun KassenAppScreen(
 @Composable
 fun CatalogGridSection(
     items: List<CatalogItem>,
+    articleSquareScale: Float,
     onItemClick: (CatalogItem) -> Unit,
     onItemLongClick: (CatalogItem) -> Unit,
     onAddNewItemClick: () -> Unit,
+    onOpenSideMenu: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier.fillMaxSize()) {
@@ -279,15 +452,20 @@ fun CatalogGridSection(
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
             )
-            Text(
-                text = "Gedrückt halten: Bearbeiten / Löschen",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+
+            IconButton(onClick = onOpenSideMenu) {
+                Icon(
+                    imageVector = Icons.Default.Menu,
+                    contentDescription = "Menü öffnen",
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
         }
 
+        val minCardSize = 100.dp * articleSquareScale
+
         LazyVerticalGrid(
-            columns = GridCells.Adaptive(minSize = 100.dp),
+            columns = GridCells.Adaptive(minSize = minCardSize),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.fillMaxSize()
@@ -295,12 +473,14 @@ fun CatalogGridSection(
             items(items, key = { it.id }) { item ->
                 ItemSquareCard(
                     item = item,
+                    scale = articleSquareScale,
                     onClick = { onItemClick(item) },
                     onLongClick = { onItemLongClick(item) }
                 )
             }
             item(key = "add_new_item_square") {
                 AddItemSquareCard(
+                    scale = articleSquareScale,
                     onClick = onAddNewItemClick
                 )
             }
@@ -313,7 +493,8 @@ fun ItemSquareCard(
     item: CatalogItem,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    scale: Float = 1.0f
 ) {
     Card(
         colors = CardDefaults.cardColors(
@@ -323,7 +504,7 @@ fun ItemSquareCard(
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         modifier = modifier
             .aspectRatio(1f)
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape((12 * scale).dp))
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onLongClick
@@ -332,32 +513,39 @@ fun ItemSquareCard(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(8.dp),
+                .padding((8 * scale).dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceBetween
         ) {
             Text(
                 text = item.name,
-                style = MaterialTheme.typography.titleMedium,
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontSize = (16 * scale).sp
+                ),
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(top = 4.dp)
+                modifier = Modifier.padding(top = (4 * scale).dp)
             )
 
             Surface(
                 color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
-                shape = RoundedCornerShape(8.dp),
+                shape = RoundedCornerShape((8 * scale).dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(
                     text = formatPrice(item.price),
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontSize = (14 * scale).sp
+                    ),
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface,
                     textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(vertical = 4.dp, horizontal = 2.dp)
+                    modifier = Modifier.padding(
+                        vertical = (4 * scale).dp,
+                        horizontal = (2 * scale).dp
+                    )
                 )
             }
         }
@@ -366,6 +554,7 @@ fun ItemSquareCard(
 
 @Composable
 fun AddItemSquareCard(
+    scale: Float = 1.0f,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -374,13 +563,13 @@ fun AddItemSquareCard(
         colors = CardDefaults.outlinedCardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.5f)
         ),
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape((12 * scale).dp),
         modifier = modifier.aspectRatio(1f)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(8.dp),
+                .padding((8 * scale).dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
@@ -388,12 +577,14 @@ fun AddItemSquareCard(
                 imageVector = Icons.Default.Add,
                 contentDescription = "Artikel hinzufügen",
                 tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(36.dp)
+                modifier = Modifier.size((36 * scale).dp)
             )
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height((4 * scale).dp))
             Text(
                 text = "+ Artikel",
-                style = MaterialTheme.typography.labelLarge,
+                style = MaterialTheme.typography.labelLarge.copy(
+                    fontSize = (14 * scale).sp
+                ),
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary,
                 textAlign = TextAlign.Center
@@ -409,7 +600,7 @@ fun CartSection(
     onAddOne: (CartItem) -> Unit,
     onRemoveOne: (CartItem) -> Unit,
     onRemoveEntireLine: (CartItem) -> Unit,
-    onClearCart: () -> Unit,
+    onCheckoutNextCustomer: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -428,15 +619,18 @@ fun CartSection(
                 fontWeight = FontWeight.Bold
             )
 
-            IconButton(
-                onClick = onClearCart,
-                enabled = cartItems.isNotEmpty()
+            Button(
+                onClick = onCheckoutNextCustomer,
+                enabled = cartItems.isNotEmpty(),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
             ) {
                 Icon(
-                    imageVector = Icons.Default.DeleteSweep,
-                    contentDescription = "Preisliste leeren",
-                    tint = if (cartItems.isNotEmpty()) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                    imageVector = Icons.Default.PersonAdd,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
                 )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Nächster Kunde", fontWeight = FontWeight.Bold)
             }
         }
 
@@ -587,6 +781,381 @@ fun CartItemRow(
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(16.dp)
                     )
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SideMenuSheet(
+    themeMode: ThemeMode,
+    uiScale: Float,
+    articleSquareScale: Float,
+    onThemeModeChange: (ThemeMode) -> Unit,
+    onUiScaleChange: (Float) -> Unit,
+    onArticleSquareScaleChange: (Float) -> Unit,
+    onOpenStatistics: () -> Unit,
+    onClearArticlesClick: () -> Unit,
+    onClearStatisticsClick: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Text(
+                text = "Menü",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
+
+            HorizontalDivider()
+
+            // Erscheinungsbild
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = "Erscheinungsbild",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    FilterChip(
+                        selected = themeMode == ThemeMode.SYSTEM,
+                        onClick = { onThemeModeChange(ThemeMode.SYSTEM) },
+                        label = { Text("System") },
+                        modifier = Modifier.weight(1f)
+                    )
+                    FilterChip(
+                        selected = themeMode == ThemeMode.LIGHT,
+                        onClick = { onThemeModeChange(ThemeMode.LIGHT) },
+                        label = { Text("Hell") },
+                        modifier = Modifier.weight(1f)
+                    )
+                    FilterChip(
+                        selected = themeMode == ThemeMode.DARK,
+                        onClick = { onThemeModeChange(ThemeMode.DARK) },
+                        label = { Text("Dunkel") },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+
+            HorizontalDivider()
+
+            // UI Skalierung Slider (1x - 2x in 0,1 Schritten)
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "UI-Skalierung",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = String.format(Locale.GERMAN, "%.1fx", uiScale),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+                Slider(
+                    value = uiScale,
+                    onValueChange = onUiScaleChange,
+                    valueRange = 1.0f..2.0f,
+                    steps = 9,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
+            HorizontalDivider()
+
+            // Artikelquadrat-Skalierung Slider (1x - 2x in 0,1 Schritten)
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Artikelquadrat-Skalierung",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = String.format(Locale.GERMAN, "%.1fx", articleSquareScale),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+                Slider(
+                    value = articleSquareScale,
+                    onValueChange = onArticleSquareScaleChange,
+                    valueRange = 1.0f..2.0f,
+                    steps = 9,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
+            HorizontalDivider()
+
+            // Statistik Knopf
+            Button(
+                onClick = {
+                    onDismiss()
+                    onOpenStatistics()
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Default.BarChart, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Statistik anzeigen")
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Rote Knöpfe ganz unten
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = {
+                        onDismiss()
+                        onClearArticlesClick()
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = RedButtonColor,
+                        contentColor = RedButtonTextColor
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.DeleteForever, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Artikel leeren", fontWeight = FontWeight.Bold)
+                }
+
+                Button(
+                    onClick = {
+                        onDismiss()
+                        onClearStatisticsClick()
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = RedButtonColor,
+                        contentColor = RedButtonTextColor
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.DeleteSweep, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Statistik leeren", fontWeight = FontWeight.Bold)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun StatisticsDialog(
+    transactions: List<Transaction>,
+    totalRevenue: Double,
+    onDismiss: () -> Unit
+) {
+    val dailySummaries = remember(transactions) {
+        getDailySalesSummaries(transactions)
+    }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false
+        )
+    ) {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.BarChart,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Text("Tagesstatistik", fontWeight = FontWeight.Bold)
+                        }
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = onDismiss) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Zurück"
+                            )
+                        }
+                    },
+                    actions = {
+                        TextButton(onClick = onDismiss) {
+                            Text("Schließen", fontWeight = FontWeight.Bold)
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainer
+                    )
+                )
+            },
+            modifier = Modifier.fillMaxSize()
+        ) { innerPadding ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                text = "Gesamteinnahmen",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                            )
+                            Text(
+                                text = formatPrice(totalRevenue),
+                                style = MaterialTheme.typography.headlineLarge,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
+                        Surface(
+                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text(
+                                text = "${dailySummaries.size} Tage aufgezeichnet",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                            )
+                        }
+                    }
+                }
+
+                HorizontalDivider()
+
+                if (dailySummaries.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "Noch keine Verkäufe in der Datenbank vorhanden",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        items(dailySummaries, key = { it.dateString }) { dailySales ->
+                            DailySalesCard(dailySales = dailySales)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun DailySalesCard(dailySales: DailySalesSummary) {
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = dailySales.dateString,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Text(
+                    text = "Tagesumsatz: ${formatPrice(dailySales.dayTotalRevenue)}",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+
+            HorizontalDivider(
+                modifier = Modifier.padding(vertical = 6.dp),
+                color = MaterialTheme.colorScheme.outlineVariant
+            )
+
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                for (article in dailySales.articles) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "${article.totalQuantity}x ${article.articleName}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Text(
+                            text = formatPrice(article.totalRevenue),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
         }

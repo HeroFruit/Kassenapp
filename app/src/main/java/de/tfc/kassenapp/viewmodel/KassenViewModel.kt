@@ -2,12 +2,20 @@ package de.tfc.kassenapp.viewmodel
 
 import android.app.Application
 import android.content.Context
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import de.tfc.kassenapp.model.CartItem
 import de.tfc.kassenapp.model.CatalogItem
+import de.tfc.kassenapp.model.ThemeMode
+import de.tfc.kassenapp.model.Transaction
+import de.tfc.kassenapp.model.TransactionItem
 import org.json.JSONArray
 import org.json.JSONObject
+import kotlin.math.roundToInt
 
 class KassenViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -15,12 +23,55 @@ class KassenViewModel(application: Application) : AndroidViewModel(application) 
 
     val catalogItems = mutableStateListOf<CatalogItem>()
     val cartItems = mutableStateListOf<CartItem>()
+    val transactions = mutableStateListOf<Transaction>()
+
+    var themeMode by mutableStateOf(ThemeMode.SYSTEM)
+        private set
+
+    var uiScale by mutableFloatStateOf(1.0f)
+        private set
+
+    var articleSquareScale by mutableFloatStateOf(1.0f)
+        private set
 
     val totalPrice: Double
         get() = cartItems.sumOf { it.totalPrice }
 
+    val totalRevenue: Double
+        get() = transactions.sumOf { it.totalAmount }
+
     init {
+        loadSettings()
         loadCatalog()
+        loadTransactions()
+    }
+
+    private fun loadSettings() {
+        val themeStr = prefs.getString("theme_mode", ThemeMode.SYSTEM.name)
+        themeMode = try {
+            ThemeMode.valueOf(themeStr ?: ThemeMode.SYSTEM.name)
+        } catch (e: Exception) {
+            ThemeMode.SYSTEM
+        }
+        uiScale = prefs.getFloat("ui_scale", 1.0f)
+        articleSquareScale = prefs.getFloat("article_square_scale", 1.0f)
+    }
+
+    fun updateThemeMode(mode: ThemeMode) {
+        themeMode = mode
+        prefs.edit().putString("theme_mode", mode.name).apply()
+    }
+
+    fun updateUiScale(scale: Float) {
+        val rounded = ((scale * 10f).roundToInt() / 10f).coerceIn(1.0f, 2.0f)
+        uiScale = rounded
+        prefs.edit().putFloat("ui_scale", rounded).apply()
+    }
+
+    fun updateArticleSquareScale(scale: Float) {
+        val rounded = ((scale * 10f).roundToInt() / 10f).coerceIn(1.0f, 2.0f)
+        articleSquareScale = rounded
+        prefs.edit().putFloat("article_square_scale", rounded).apply()
     }
 
     private fun loadCatalog() {
@@ -46,7 +97,6 @@ class KassenViewModel(application: Application) : AndroidViewModel(application) 
                 e.printStackTrace()
             }
         }
-
         catalogItems.clear()
     }
 
@@ -64,6 +114,111 @@ class KassenViewModel(application: Application) : AndroidViewModel(application) 
         } catch (e: Exception) {
             e.printStackTrace()
         }
+    }
+
+    private fun loadTransactions() {
+        val savedJson = prefs.getString("transactions_db", null)
+        if (!savedJson.isNullOrEmpty()) {
+            try {
+                val jsonArray = JSONArray(savedJson)
+                val loaded = mutableListOf<Transaction>()
+                for (i in 0 until jsonArray.length()) {
+                    val obj = jsonArray.getJSONObject(i)
+                    val id = obj.getString("id")
+                    val timestamp = obj.getLong("timestamp")
+                    val totalAmount = obj.getDouble("totalAmount")
+
+                    val itemsArr = obj.getJSONArray("items")
+                    val txItems = mutableListOf<TransactionItem>()
+                    for (j in 0 until itemsArr.length()) {
+                        val itemObj = itemsArr.getJSONObject(j)
+                        txItems.add(
+                            TransactionItem(
+                                name = itemObj.getString("name"),
+                                price = itemObj.getDouble("price"),
+                                quantity = itemObj.getInt("quantity")
+                            )
+                        )
+                    }
+
+                    loaded.add(
+                        Transaction(
+                            id = id,
+                            timestamp = timestamp,
+                            items = txItems,
+                            totalAmount = totalAmount
+                        )
+                    )
+                }
+                transactions.clear()
+                transactions.addAll(loaded.sortedByDescending { it.timestamp })
+                return
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+        transactions.clear()
+    }
+
+    private fun saveTransactions() {
+        try {
+            val jsonArray = JSONArray()
+            for (tx in transactions) {
+                val obj = JSONObject()
+                obj.put("id", tx.id)
+                obj.put("timestamp", tx.timestamp)
+                obj.put("totalAmount", tx.totalAmount)
+
+                val itemsArr = JSONArray()
+                for (txItem in tx.items) {
+                    val itemObj = JSONObject()
+                    itemObj.put("name", txItem.name)
+                    itemObj.put("price", txItem.price)
+                    itemObj.put("quantity", txItem.quantity)
+                    itemsArr.put(itemObj)
+                }
+                obj.put("items", itemsArr)
+
+                jsonArray.put(obj)
+            }
+            prefs.edit().putString("transactions_db", jsonArray.toString()).apply()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    fun checkoutNextCustomer(): Boolean {
+        if (cartItems.isEmpty()) return false
+
+        val txItems = cartItems.map {
+            TransactionItem(
+                name = it.item.name,
+                price = it.item.price,
+                quantity = it.quantity
+            )
+        }
+
+        val newTransaction = Transaction(
+            timestamp = System.currentTimeMillis(),
+            items = txItems,
+            totalAmount = totalPrice
+        )
+
+        transactions.add(0, newTransaction)
+        saveTransactions()
+        cartItems.clear()
+        return true
+    }
+
+    fun clearArticleDatabase() {
+        catalogItems.clear()
+        cartItems.clear()
+        saveCatalog()
+    }
+
+    fun clearStatisticsDatabase() {
+        transactions.clear()
+        saveTransactions()
     }
 
     fun addToCart(item: CatalogItem) {

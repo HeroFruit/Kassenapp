@@ -2,8 +2,12 @@ package de.tfc.kassenapp
 
 import de.tfc.kassenapp.model.CartItem
 import de.tfc.kassenapp.model.CatalogItem
+import de.tfc.kassenapp.model.Transaction
+import de.tfc.kassenapp.model.TransactionItem
 import de.tfc.kassenapp.ui.formatPrice
+import de.tfc.kassenapp.ui.formatTimestamp
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Test
 
 class KassenAppTest {
@@ -34,5 +38,17 @@ class KassenAppTest {
 
         val total = cart.sumOf { it.totalPrice }
         assertEquals(8.00, total, 0.001)
+    }
+
+    @Test
+    fun testTransactionCreation() {
+        val items = listOf(
+            TransactionItem(name = "Wasser", price = 1.50, quantity = 2)
+        )
+        val tx = Transaction(items = items, totalAmount = 3.00)
+
+        assertEquals(1, tx.items.size)
+        assertEquals(3.00, tx.totalAmount, 0.001)
+        assertNotNull(formatTimestamp(tx.timestamp))
     }
 }

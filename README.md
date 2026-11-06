@@ -10,7 +10,6 @@ Kassenapp ist eine Android-basierte App, die entwickelt wurde, um den Kaffee/Kuc
 ### 1. Artikelverwaltung & Kachel-Grid
 *   **Artikel anlegen:** Neues Artikel-Quadrat (`+ Artikel`) direkt am Ende des Rasts zum schnellen Hinzufügen mit Name und Preis.
 *   **Artikel bearbeiten & löschen:** Langes Drücken auf ein Artikel-Quadrat öffnet ein Menü zum Bearbeiten von Name/Preis oder zum Löschen aus der Preisliste.
-*   **Keine Vorgefertigten Artikel:** Startet auf Wunsch sauber ohne Testdaten.
 *   **Artikel-Datenbank leeren:** Vollflächig roter Button im Seitenmenü mit Sicherheitsbestätigung.
 
 ### 2. Warenkorb & „Nächster Kunde“-Checkout

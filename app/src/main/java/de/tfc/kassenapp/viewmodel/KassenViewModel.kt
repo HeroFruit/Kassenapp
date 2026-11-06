@@ -7,6 +7,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.core.content.edit
 import androidx.lifecycle.AndroidViewModel
 import de.tfc.kassenapp.model.CartItem
 import de.tfc.kassenapp.model.CatalogItem
@@ -59,19 +60,19 @@ class KassenViewModel(application: Application) : AndroidViewModel(application) 
 
     fun updateThemeMode(mode: ThemeMode) {
         themeMode = mode
-        prefs.edit().putString("theme_mode", mode.name).apply()
+        prefs.edit { putString("theme_mode", mode.name) }
     }
 
     fun updateUiScale(scale: Float) {
         val rounded = ((scale * 10f).roundToInt() / 10f).coerceIn(1.0f, 2.0f)
         uiScale = rounded
-        prefs.edit().putFloat("ui_scale", rounded).apply()
+        prefs.edit { putFloat("ui_scale", rounded) }
     }
 
     fun updateArticleSquareScale(scale: Float) {
         val rounded = ((scale * 10f).roundToInt() / 10f).coerceIn(1.0f, 2.0f)
         articleSquareScale = rounded
-        prefs.edit().putFloat("article_square_scale", rounded).apply()
+        prefs.edit { putFloat("article_square_scale", rounded) }
     }
 
     private fun loadCatalog() {
@@ -110,7 +111,7 @@ class KassenViewModel(application: Application) : AndroidViewModel(application) 
                 obj.put("price", item.price)
                 jsonArray.put(obj)
             }
-            prefs.edit().putString("catalog_items", jsonArray.toString()).apply()
+            prefs.edit { putString("catalog_items", jsonArray.toString()) }
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -181,7 +182,7 @@ class KassenViewModel(application: Application) : AndroidViewModel(application) 
 
                 jsonArray.put(obj)
             }
-            prefs.edit().putString("transactions_db", jsonArray.toString()).apply()
+            prefs.edit { putString("transactions_db", jsonArray.toString()) }
         } catch (e: Exception) {
             e.printStackTrace()
         }

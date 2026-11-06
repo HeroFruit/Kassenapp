@@ -1,6 +1,14 @@
 package de.tfc.kassenapp.ui
 
+import android.content.ContentValues
+import android.content.Context
 import android.content.res.Configuration
+import android.graphics.Paint
+import android.graphics.pdf.PdfDocument
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
+import android.widget.Toast
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -31,6 +39,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.PersonAdd
@@ -69,6 +78,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -82,12 +92,20 @@ import de.tfc.kassenapp.model.CatalogItem
 import de.tfc.kassenapp.model.ThemeMode
 import de.tfc.kassenapp.model.Transaction
 import de.tfc.kassenapp.viewmodel.KassenViewModel
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.ByteArrayOutputStream
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
 private val RedButtonColor = Color(0xFFD32F2F)
 private val RedButtonTextColor = Color.White
+
+enum class ExportFormat {
+    PDF, EXCEL_CSV, NATIVE_JSON
+}
 
 data class DailyArticleSummary(
     val articleName: String,
@@ -151,6 +169,164 @@ fun getDailySalesSummaries(transactions: List<Transaction>): List<DailySalesSumm
             dayTotalQuantity = dayTotalQty
         )
     }.sortedByDescending { it.dayTimestamp }
+}
+
+fun exportStatisticsToDownloads(
+    context: Context,
+    format: ExportFormat,
+    dailySummaries: List<DailySalesSummary>,
+    totalRevenue: Double
+): String? {
+    val timeStr = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.GERMAN).format(Date())
+
+    return when (format) {
+        ExportFormat.PDF -> {
+            val fileName = "kassenapp_statistik_$timeStr.pdf"
+            val pdfBytes = generatePdfData(dailySummaries, totalRevenue)
+            saveToDownloads(context, fileName, "application/pdf", pdfBytes)
+        }
+        ExportFormat.EXCEL_CSV -> {
+            val fileName = "kassenapp_statistik_$timeStr.csv"
+            val csvBytes = generateCsvData(dailySummaries, totalRevenue)
+            saveToDownloads(context, fileName, "text/csv", csvBytes)
+        }
+        ExportFormat.NATIVE_JSON -> {
+            val fileName = "kassenapp_statistik_$timeStr.json"
+            val jsonBytes = generateJsonData(dailySummaries, totalRevenue)
+            saveToDownloads(context, fileName, "application/json", jsonBytes)
+        }
+    }
+}
+
+fun generatePdfData(dailySummaries: List<DailySalesSummary>, totalRevenue: Double): ByteArray {
+    val pdfDocument = PdfDocument()
+    val pageInfo = PdfDocument.PageInfo.Builder(595, 842, 1).create()
+    var page = pdfDocument.startPage(pageInfo)
+    var canvas = page.canvas
+    val paint = Paint()
+
+    paint.textSize = 20f
+    paint.isFakeBoldText = true
+    paint.color = android.graphics.Color.BLACK
+    canvas.drawText("Kassenapp - Verkaufsstatistik", 40f, 50f, paint)
+
+    paint.textSize = 11f
+    paint.isFakeBoldText = false
+    val dateStr = SimpleDateFormat("dd.MM.yyyy HH:mm:ss", Locale.GERMAN).format(Date())
+    canvas.drawText("Erstellt am: $dateStr", 40f, 70f, paint)
+
+    paint.textSize = 14f
+    paint.isFakeBoldText = true
+    canvas.drawText("Gesamteinnahmen: ${formatPrice(totalRevenue)}", 40f, 95f, paint)
+
+    paint.textSize = 11f
+    var y = 130f
+
+    for (day in dailySummaries) {
+        if (y > 780f) {
+            pdfDocument.finishPage(page)
+            page = pdfDocument.startPage(pageInfo)
+            canvas = page.canvas
+            y = 50f
+        }
+
+        paint.isFakeBoldText = true
+        paint.textSize = 13f
+        canvas.drawText("Datum: ${day.dateString}  (Tagesumsatz: ${formatPrice(day.dayTotalRevenue)})", 40f, y, paint)
+        y += 20f
+
+        paint.isFakeBoldText = false
+        paint.textSize = 11f
+        for (art in day.articles) {
+            if (y > 800f) {
+                pdfDocument.finishPage(page)
+                page = pdfDocument.startPage(pageInfo)
+                canvas = page.canvas
+                y = 50f
+            }
+            canvas.drawText("   • ${art.totalQuantity}x ${art.articleName} — ${formatPrice(art.totalRevenue)}", 50f, y, paint)
+            y += 16f
+        }
+        y += 12f
+    }
+
+    pdfDocument.finishPage(page)
+    val outputStream = ByteArrayOutputStream()
+    pdfDocument.writeTo(outputStream)
+    pdfDocument.close()
+    return outputStream.toByteArray()
+}
+
+fun generateCsvData(dailySummaries: List<DailySalesSummary>, totalRevenue: Double): ByteArray {
+    val sb = StringBuilder()
+    sb.append("\uFEFF")
+    sb.append("Datum;Artikel;Verkaufte Menge;Artikel-Umsatz;Tages-Gesamtumsaetze\n")
+
+    for (day in dailySummaries) {
+        for (art in day.articles) {
+            val dateStr = day.dateString
+            val artName = art.articleName.replace(";", ",")
+            val qty = art.totalQuantity
+            val artRev = formatPrice(art.totalRevenue)
+            val dayRev = formatPrice(day.dayTotalRevenue)
+            sb.append("$dateStr;$artName;$qty;$artRev;$dayRev\n")
+        }
+    }
+
+    sb.append("\nGesamteinnahmen: ${formatPrice(totalRevenue)}\n")
+    return sb.toString().toByteArray(Charsets.UTF_8)
+}
+
+fun generateJsonData(dailySummaries: List<DailySalesSummary>, totalRevenue: Double): ByteArray {
+    val root = JSONObject()
+    root.put("appName", "Kassenapp")
+    root.put("exportTimestamp", System.currentTimeMillis())
+    root.put("totalRevenue", totalRevenue)
+
+    val daysArr = JSONArray()
+    for (day in dailySummaries) {
+        val dayObj = JSONObject()
+        dayObj.put("date", day.dateString)
+        dayObj.put("dayTotalRevenue", day.dayTotalRevenue)
+
+        val articlesArr = JSONArray()
+        for (art in day.articles) {
+            val artObj = JSONObject()
+            artObj.put("articleName", art.articleName)
+            artObj.put("totalQuantity", art.totalQuantity)
+            artObj.put("totalRevenue", art.totalRevenue)
+            articlesArr.put(artObj)
+        }
+        dayObj.put("articles", articlesArr)
+        daysArr.put(dayObj)
+    }
+    root.put("dailySummaries", daysArr)
+
+    return root.toString(2).toByteArray(Charsets.UTF_8)
+}
+
+fun saveToDownloads(context: Context, fileName: String, mimeType: String, bytes: ByteArray): String? {
+    val resolver = context.contentResolver
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        val contentValues = ContentValues().apply {
+            put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+            put(MediaStore.MediaColumns.MIME_TYPE, mimeType)
+            put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+        }
+        val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
+        if (uri != null) {
+            resolver.openOutputStream(uri)?.use { outputStream ->
+                outputStream.write(bytes)
+            }
+            return "Downloads/$fileName"
+        }
+    }
+
+    val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+    if (!downloadsDir.exists()) downloadsDir.mkdirs()
+    val file = File(downloadsDir, fileName)
+    file.writeBytes(bytes)
+    return file.absolutePath
 }
 
 @Composable
@@ -979,6 +1155,9 @@ fun StatisticsDialog(
         getDailySalesSummaries(transactions)
     }
 
+    var showExportDialog by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(
@@ -998,7 +1177,7 @@ fun StatisticsDialog(
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.primary
                             )
-                            Text("Tagesstatistik", fontWeight = FontWeight.Bold)
+                            Text("Statistik", fontWeight = FontWeight.Bold)
                         }
                     },
                     navigationIcon = {
@@ -1010,8 +1189,17 @@ fun StatisticsDialog(
                         }
                     },
                     actions = {
-                        TextButton(onClick = onDismiss) {
-                            Text("Schließen", fontWeight = FontWeight.Bold)
+                        Button(
+                            onClick = { showExportDialog = true },
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Download,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Export", fontWeight = FontWeight.Bold)
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
@@ -1097,6 +1285,126 @@ fun StatisticsDialog(
             }
         }
     }
+
+    if (showExportDialog) {
+        ExportDialog(
+            onDismiss = { showExportDialog = false },
+            onExportSelected = { format ->
+                showExportDialog = false
+                val savedPath = exportStatisticsToDownloads(context, format, dailySummaries, totalRevenue)
+                if (savedPath != null) {
+                    Toast.makeText(
+                        context,
+                        "Export erfolgreich im Download-Ordner gespeichert:\n$savedPath",
+                        Toast.LENGTH_LONG
+                    ).show()
+                } else {
+                    Toast.makeText(
+                        context,
+                        "Fehler beim Exportieren der Datei.",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }
+        )
+    }
+}
+
+@Composable
+fun ExportDialog(
+    onDismiss: () -> Unit,
+    onExportSelected: (ExportFormat) -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Download,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+                Text("Statistik exportieren", fontWeight = FontWeight.Bold)
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(
+                    text = "Wählen Sie das Dateiformat für den Export in den Download-Ordner:",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                HorizontalDivider()
+
+                OutlinedCard(
+                    onClick = { onExportSelected(ExportFormat.PDF) },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "📄 PDF-Dokument (.pdf)",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+
+                OutlinedCard(
+                    onClick = { onExportSelected(ExportFormat.EXCEL_CSV) },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "📊 Excel-Tabelle (.csv)",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+
+                OutlinedCard(
+                    onClick = { onExportSelected(ExportFormat.NATIVE_JSON) },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "💾 Native Datenbank (.json)",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            OutlinedButton(onClick = onDismiss) {
+                Text("Abbrechen")
+            }
+        }
+    )
 }
 
 @Composable

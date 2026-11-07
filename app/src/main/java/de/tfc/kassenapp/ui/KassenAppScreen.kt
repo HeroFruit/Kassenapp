@@ -10,7 +10,10 @@ import android.os.Environment
 import android.provider.MediaStore
 import android.widget.Toast
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,6 +29,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -47,6 +51,7 @@ import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -60,7 +65,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
@@ -72,7 +76,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.VerticalDivider
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableDoubleStateOf
@@ -1481,169 +1484,235 @@ fun SideMenuSheet(
     onClearStatisticsClick: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    ModalBottomSheet(
+    Dialog(
         onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
-        Column(
+        Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.5f))
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = onDismiss
+                ),
+            contentAlignment = Alignment.CenterEnd
         ) {
-            Text(
-                text = "Menü",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold
-            )
-
-            HorizontalDivider()
-
-            // Erscheinungsbild
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    text = "Erscheinungsbild",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    FilterChip(
-                        selected = themeMode == ThemeMode.SYSTEM,
-                        onClick = { onThemeModeChange(ThemeMode.SYSTEM) },
-                        label = { Text("System") },
-                        modifier = Modifier.weight(1f)
-                    )
-                    FilterChip(
-                        selected = themeMode == ThemeMode.LIGHT,
-                        onClick = { onThemeModeChange(ThemeMode.LIGHT) },
-                        label = { Text("Hell") },
-                        modifier = Modifier.weight(1f)
-                    )
-                    FilterChip(
-                        selected = themeMode == ThemeMode.DARK,
-                        onClick = { onThemeModeChange(ThemeMode.DARK) },
-                        label = { Text("Dunkel") },
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-            }
-
-            HorizontalDivider()
-
-            // UI Skalierung Slider (1x - 2x in 0,1 Schritten)
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "UI-Skalierung",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Text(
-                        text = String.format(Locale.GERMAN, "%.1fx", uiScale),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-                Slider(
-                    value = uiScale,
-                    onValueChange = onUiScaleChange,
-                    valueRange = 1.0f..2.0f,
-                    steps = 9,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-
-            HorizontalDivider()
-
-            // Artikelquadrat-Skalierung Slider (1x - 2x in 0,1 Schritten)
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Artikelquadrat-Skalierung",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Text(
-                        text = String.format(Locale.GERMAN, "%.1fx", articleSquareScale),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-                Slider(
-                    value = articleSquareScale,
-                    onValueChange = onArticleSquareScaleChange,
-                    valueRange = 1.0f..2.0f,
-                    steps = 9,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-
-            HorizontalDivider()
-
-            // Statistik Knopf
-            Button(
-                onClick = {
-                    onDismiss()
-                    onOpenStatistics()
-                },
-                modifier = Modifier.fillMaxWidth()
+            Surface(
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 6.dp,
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .fillMaxWidth(0.85f)
+                    .widthIn(max = 400.dp)
+                    .clickable(enabled = false) {}
             ) {
-                Icon(Icons.Default.BarChart, contentDescription = null)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Statistik anzeigen")
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Rote Knöpfe ganz unten
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(
-                    onClick = {
-                        onDismiss()
-                        onClearArticlesClick()
-                    },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = RedButtonColor,
-                        contentColor = RedButtonTextColor
-                    ),
-                    modifier = Modifier.fillMaxWidth()
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(vertical = 12.dp),
+                    verticalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Icon(Icons.Default.DeleteForever, contentDescription = null)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Artikel leeren", fontWeight = FontWeight.Bold)
-                }
+                    Column {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 20.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Settings,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                                Text(
+                                    text = "Menü",
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
 
-                Button(
-                    onClick = {
-                        onDismiss()
-                        onClearStatisticsClick()
-                    },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = RedButtonColor,
-                        contentColor = RedButtonTextColor
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Icon(Icons.Default.DeleteSweep, contentDescription = null)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Statistik leeren", fontWeight = FontWeight.Bold)
+                            IconButton(onClick = onDismiss) {
+                                Icon(
+                                    Icons.Default.Close,
+                                    contentDescription = "Schließen"
+                                )
+                            }
+                        }
+
+                        HorizontalDivider()
+                    }
+
+                    LazyColumn(
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(horizontal = 20.dp, vertical = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        item {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text(
+                                    text = "Erscheinungsbild",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    FilterChip(
+                                        selected = themeMode == ThemeMode.SYSTEM,
+                                        onClick = { onThemeModeChange(ThemeMode.SYSTEM) },
+                                        label = { Text("System") },
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    FilterChip(
+                                        selected = themeMode == ThemeMode.LIGHT,
+                                        onClick = { onThemeModeChange(ThemeMode.LIGHT) },
+                                        label = { Text("Hell") },
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    FilterChip(
+                                        selected = themeMode == ThemeMode.DARK,
+                                        onClick = { onThemeModeChange(ThemeMode.DARK) },
+                                        label = { Text("Dunkel") },
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+                            }
+                        }
+
+                        item { HorizontalDivider() }
+
+                        item {
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "UI-Skalierung",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    Text(
+                                        text = String.format(Locale.GERMAN, "%.1fx", uiScale),
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                                Slider(
+                                    value = uiScale,
+                                    onValueChange = onUiScaleChange,
+                                    valueRange = 1.0f..2.0f,
+                                    steps = 9,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        }
+
+                        item { HorizontalDivider() }
+
+                        item {
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "Artikelquadrat-Skalierung",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    Text(
+                                        text = String.format(Locale.GERMAN, "%.1fx", articleSquareScale),
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                                Slider(
+                                    value = articleSquareScale,
+                                    onValueChange = onArticleSquareScaleChange,
+                                    valueRange = 1.0f..2.0f,
+                                    steps = 9,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        }
+
+                        item { HorizontalDivider() }
+
+                        item {
+                            Button(
+                                onClick = {
+                                    onDismiss()
+                                    onOpenStatistics()
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(48.dp)
+                            ) {
+                                Icon(Icons.Default.BarChart, contentDescription = null)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Statistik anzeigen", fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+
+                    Column(
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        HorizontalDivider(modifier = Modifier.padding(bottom = 4.dp))
+
+                        Button(
+                            onClick = {
+                                onDismiss()
+                                onClearArticlesClick()
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = RedButtonColor,
+                                contentColor = RedButtonTextColor
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(48.dp)
+                        ) {
+                            Icon(Icons.Default.DeleteForever, contentDescription = null)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Artikel leeren", fontWeight = FontWeight.Bold)
+                        }
+
+                        Button(
+                            onClick = {
+                                onDismiss()
+                                onClearStatisticsClick()
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = RedButtonColor,
+                                contentColor = RedButtonTextColor
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(48.dp)
+                        ) {
+                            Icon(Icons.Default.DeleteSweep, contentDescription = null)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Statistik leeren", fontWeight = FontWeight.Bold)
+                        }
+                    }
                 }
             }
-
-            Spacer(modifier = Modifier.height(16.dp))
         }
     }
 }

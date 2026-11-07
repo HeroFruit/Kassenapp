@@ -44,6 +44,7 @@ import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.AlertDialog
@@ -52,10 +53,12 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
@@ -72,8 +75,10 @@ import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -336,15 +341,20 @@ fun KassenAppScreen(
     viewModel: KassenViewModel,
     modifier: Modifier = Modifier
 ) {
-    var showAddItemDialog by remember { mutableStateOf(false) }
-    var itemToEdit by remember { mutableStateOf<CatalogItem?>(null) }
-    var itemForContextMenu by remember { mutableStateOf<CatalogItem?>(null) }
-    var itemToDeleteConfirm by remember { mutableStateOf<CatalogItem?>(null) }
+    var showAddItemDialog by rememberSaveable { mutableStateOf(false) }
+    var itemToEditId by rememberSaveable { mutableStateOf<String?>(null) }
+    var itemForContextMenuId by rememberSaveable { mutableStateOf<String?>(null) }
+    var itemToDeleteConfirmId by rememberSaveable { mutableStateOf<String?>(null) }
 
-    var showSideMenu by remember { mutableStateOf(false) }
-    var showStatisticsDialog by remember { mutableStateOf(false) }
-    var showClearArticlesConfirm by remember { mutableStateOf(false) }
-    var showClearStatisticsConfirm by remember { mutableStateOf(false) }
+    var showSideMenu by rememberSaveable { mutableStateOf(false) }
+    var showStatisticsDialog by rememberSaveable { mutableStateOf(false) }
+    var showClearArticlesConfirm by rememberSaveable { mutableStateOf(false) }
+    var showClearStatisticsConfirm by rememberSaveable { mutableStateOf(false) }
+    var showChangeCalculatorDialog by rememberSaveable { mutableStateOf(false) }
+
+    val itemToEdit = viewModel.catalogItems.find { it.id == itemToEditId }
+    val itemForContextMenu = viewModel.catalogItems.find { it.id == itemForContextMenuId }
+    val itemToDeleteConfirm = viewModel.catalogItems.find { it.id == itemToDeleteConfirmId }
 
     val configuration = LocalConfiguration.current
     val isPortrait = configuration.orientation == Configuration.ORIENTATION_PORTRAIT
@@ -368,7 +378,7 @@ fun KassenAppScreen(
                         items = viewModel.catalogItems,
                         articleSquareScale = viewModel.articleSquareScale,
                         onItemClick = { item -> viewModel.addToCart(item) },
-                        onItemLongClick = { item -> itemForContextMenu = item },
+                        onItemLongClick = { item -> itemForContextMenuId = item.id },
                         onAddNewItemClick = { showAddItemDialog = true },
                         onOpenSideMenu = { showSideMenu = true }
                     )
@@ -385,10 +395,10 @@ fun KassenAppScreen(
                     CartSection(
                         cartItems = viewModel.cartItems,
                         totalPrice = viewModel.totalPrice,
-                        onAddOne = { cartItem -> viewModel.addToCart(cartItem.item) },
                         onRemoveOne = { cartItem -> viewModel.removeFromCart(cartItem) },
                         onRemoveEntireLine = { cartItem -> viewModel.removeEntireLineFromCart(cartItem) },
-                        onCheckoutNextCustomer = { viewModel.checkoutNextCustomer() }
+                        onCheckoutNextCustomer = { viewModel.checkoutNextCustomer() },
+                        onOpenChangeCalculator = { showChangeCalculatorDialog = true }
                     )
                 }
             }
@@ -408,7 +418,7 @@ fun KassenAppScreen(
                         items = viewModel.catalogItems,
                         articleSquareScale = viewModel.articleSquareScale,
                         onItemClick = { item -> viewModel.addToCart(item) },
-                        onItemLongClick = { item -> itemForContextMenu = item },
+                        onItemLongClick = { item -> itemForContextMenuId = item.id },
                         onAddNewItemClick = { showAddItemDialog = true },
                         onOpenSideMenu = { showSideMenu = true }
                     )
@@ -425,14 +435,26 @@ fun KassenAppScreen(
                     CartSection(
                         cartItems = viewModel.cartItems,
                         totalPrice = viewModel.totalPrice,
-                        onAddOne = { cartItem -> viewModel.addToCart(cartItem.item) },
                         onRemoveOne = { cartItem -> viewModel.removeFromCart(cartItem) },
                         onRemoveEntireLine = { cartItem -> viewModel.removeEntireLineFromCart(cartItem) },
-                        onCheckoutNextCustomer = { viewModel.checkoutNextCustomer() }
+                        onCheckoutNextCustomer = { viewModel.checkoutNextCustomer() },
+                        onOpenChangeCalculator = { showChangeCalculatorDialog = true }
                     )
                 }
             }
         }
+    }
+
+    // Rückgeldrechner Dialog
+    if (showChangeCalculatorDialog && viewModel.cartItems.isNotEmpty()) {
+        ChangeCalculatorDialog(
+            totalPrice = viewModel.totalPrice,
+            onCheckoutNextCustomer = {
+                viewModel.checkoutNextCustomer()
+                showChangeCalculatorDialog = false
+            },
+            onDismiss = { showChangeCalculatorDialog = false }
+        )
     }
 
     // Seitenmenü Sheet
@@ -539,10 +561,10 @@ fun KassenAppScreen(
             title = "Artikel bearbeiten",
             initialName = targetItem.name,
             initialPrice = String.format(Locale.GERMAN, "%.2f", targetItem.price),
-            onDismiss = { itemToEdit = null },
+            onDismiss = { itemToEditId = null },
             onConfirm = { name, price ->
                 viewModel.updateCatalogItem(targetItem.id, name, price)
-                itemToEdit = null
+                itemToEditId = null
             }
         )
     }
@@ -550,14 +572,14 @@ fun KassenAppScreen(
     // Menü aufrufen bei langem Drücken auf ein Artikelquadrat
     itemForContextMenu?.let { targetItem ->
         AlertDialog(
-            onDismissRequest = { itemForContextMenu = null },
+            onDismissRequest = { itemForContextMenuId = null },
             title = { Text(text = targetItem.name, fontWeight = FontWeight.Bold) },
             text = { Text("Preis: ${formatPrice(targetItem.price)}\nWas möchten Sie mit diesem Artikel tun?") },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        itemToEdit = targetItem
-                        itemForContextMenu = null
+                        itemToEditId = targetItem.id
+                        itemForContextMenuId = null
                     }
                 ) {
                     Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -568,8 +590,8 @@ fun KassenAppScreen(
             dismissButton = {
                 TextButton(
                     onClick = {
-                        itemToDeleteConfirm = targetItem
-                        itemForContextMenu = null
+                        itemToDeleteConfirmId = targetItem.id
+                        itemForContextMenuId = null
                     },
                     colors = ButtonDefaults.textButtonColors(contentColor = RedButtonColor)
                 ) {
@@ -584,14 +606,14 @@ fun KassenAppScreen(
     // Bestätigung zum Einzel-Löschen
     itemToDeleteConfirm?.let { targetItem ->
         AlertDialog(
-            onDismissRequest = { itemToDeleteConfirm = null },
+            onDismissRequest = { itemToDeleteConfirmId = null },
             title = { Text("Artikel löschen") },
             text = { Text("Möchten Sie \"${targetItem.name}\" wirklich aus der Preisliste löschen?") },
             confirmButton = {
                 Button(
                     onClick = {
                         viewModel.deleteCatalogItem(targetItem)
-                        itemToDeleteConfirm = null
+                        itemToDeleteConfirmId = null
                     },
                     colors = ButtonDefaults.buttonColors(
                         containerColor = RedButtonColor,
@@ -602,11 +624,476 @@ fun KassenAppScreen(
                 }
             },
             dismissButton = {
-                OutlinedButton(onClick = { itemToDeleteConfirm = null }) {
+                OutlinedButton(onClick = { itemToDeleteConfirmId = null }) {
                     Text("Abbrechen")
                 }
             }
         )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ChangeCalculatorDialog(
+    totalPrice: Double,
+    onCheckoutNextCustomer: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    var givenAmount by rememberSaveable { mutableDoubleStateOf(0.0) }
+    var selectedCounts by remember { mutableStateOf(mapOf<Double, Int>()) }
+
+    val change = givenAmount - totalPrice
+    val isEnough = givenAmount >= totalPrice - 0.001
+
+    val configuration = LocalConfiguration.current
+    val isPortrait = configuration.orientation == Configuration.ORIENTATION_PORTRAIT
+
+    val denominationList = listOf(
+        50.00 to "50 €",
+        20.00 to "20 €",
+        10.00 to "10 €",
+        5.00 to "5 €",
+        2.00 to "2 €",
+        1.00 to "1 €",
+        0.50 to "0,50 €",
+        0.20 to "0,20 €",
+        0.10 to "0,10 €"
+    )
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Payments,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Text("Rückgeldrechner", fontWeight = FontWeight.Bold)
+                        }
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = onDismiss) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zurück")
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainer
+                    )
+                )
+            },
+            modifier = Modifier.fillMaxSize()
+        ) { innerPadding ->
+            if (isPortrait) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding)
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Card(
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.primaryContainer
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column {
+                                    Text(
+                                        text = "Gesamtpreis",
+                                        style = MaterialTheme.typography.labelLarge,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                                    )
+                                    Text(
+                                        text = formatPrice(totalPrice),
+                                        style = MaterialTheme.typography.headlineLarge,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                }
+
+                                Column(horizontalAlignment = Alignment.End) {
+                                    Text(
+                                        text = "Gegeben",
+                                        style = MaterialTheme.typography.labelLarge,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                                    )
+                                    Text(
+                                        text = formatPrice(givenAmount),
+                                        style = MaterialTheme.typography.headlineLarge,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = {
+                                    givenAmount = totalPrice
+                                    selectedCounts = emptyMap()
+                                },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("Passt genau", textAlign = TextAlign.Center)
+                            }
+                            OutlinedButton(
+                                onClick = {
+                                    givenAmount = 0.0
+                                    selectedCounts = emptyMap()
+                                },
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    contentColor = MaterialTheme.colorScheme.error
+                                ),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("Gegeben zurücksetzen", textAlign = TextAlign.Center)
+                            }
+                        }
+
+                        Text(
+                            text = "Geldscheine & Münzen antippen:",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+
+                        LazyVerticalGrid(
+                            columns = GridCells.Adaptive(minSize = 85.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            items(denominationList) { (value, label) ->
+                                val count = selectedCounts[value] ?: 0
+                                Card(
+                                    onClick = {
+                                        givenAmount += value
+                                        selectedCounts = selectedCounts + (value to (count + 1))
+                                    },
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = if (value >= 5.0) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.tertiaryContainer
+                                    ),
+                                    shape = RoundedCornerShape(12.dp),
+                                    modifier = Modifier.aspectRatio(1.2f)
+                                ) {
+                                    Box(modifier = Modifier.fillMaxSize()) {
+                                        Text(
+                                            text = label,
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            textAlign = TextAlign.Center,
+                                            modifier = Modifier.align(Alignment.Center)
+                                        )
+
+                                        if (count > 0) {
+                                            Surface(
+                                                color = MaterialTheme.colorScheme.primary,
+                                                shape = RoundedCornerShape(topStart = 8.dp, bottomEnd = 12.dp),
+                                                modifier = Modifier.align(Alignment.BottomEnd)
+                                            ) {
+                                                Text(
+                                                    text = "${count}x",
+                                                    color = MaterialTheme.colorScheme.onPrimary,
+                                                    style = MaterialTheme.typography.labelMedium,
+                                                    fontWeight = FontWeight.ExtraBold,
+                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Card(
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (isEnough) MaterialTheme.colorScheme.surfaceContainerHigh else MaterialTheme.colorScheme.errorContainer
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = if (isEnough) "Rückgeld:" else "Noch zu zahlen:",
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isEnough) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onErrorContainer
+                                )
+                                Text(
+                                    text = formatPrice(if (isEnough) change else (totalPrice - givenAmount)),
+                                    style = MaterialTheme.typography.headlineLarge,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = if (isEnough) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                                )
+                            }
+                        }
+
+                        Button(
+                            onClick = {
+                                onCheckoutNextCustomer()
+                                onDismiss()
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                contentColor = MaterialTheme.colorScheme.onPrimary
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(52.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.PersonAdd,
+                                contentDescription = null,
+                                modifier = Modifier.size(22.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Nächster Kunde",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            } else {
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding)
+                        .padding(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .weight(1.2f)
+                            .fillMaxHeight(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "Geldscheine & Münzen antippen:",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+
+                        LazyVerticalGrid(
+                            columns = GridCells.Adaptive(minSize = 80.dp),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.fillMaxSize()
+                        ) {
+                            items(denominationList) { (value, label) ->
+                                val count = selectedCounts[value] ?: 0
+                                Card(
+                                    onClick = {
+                                        givenAmount += value
+                                        selectedCounts = selectedCounts + (value to (count + 1))
+                                    },
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = if (value >= 5.0) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.tertiaryContainer
+                                    ),
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier.aspectRatio(1.2f)
+                                ) {
+                                    Box(modifier = Modifier.fillMaxSize()) {
+                                        Text(
+                                            text = label,
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            textAlign = TextAlign.Center,
+                                            modifier = Modifier.align(Alignment.Center)
+                                        )
+
+                                        if (count > 0) {
+                                            Surface(
+                                                color = MaterialTheme.colorScheme.primary,
+                                                shape = RoundedCornerShape(topStart = 8.dp, bottomEnd = 10.dp),
+                                                modifier = Modifier.align(Alignment.BottomEnd)
+                                            ) {
+                                                Text(
+                                                    text = "${count}x",
+                                                    color = MaterialTheme.colorScheme.onPrimary,
+                                                    style = MaterialTheme.typography.labelMedium,
+                                                    fontWeight = FontWeight.ExtraBold,
+                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    VerticalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight(),
+                        verticalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Card(
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.primaryContainer
+                                ),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(12.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column {
+                                        Text(
+                                            text = "Gesamtpreis",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                                        )
+                                        Text(
+                                            text = formatPrice(totalPrice),
+                                            style = MaterialTheme.typography.titleLarge,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                                        )
+                                    }
+
+                                    Column(horizontalAlignment = Alignment.End) {
+                                        Text(
+                                            text = "Gegeben",
+                                            style = MaterialTheme.typography.labelLarge,
+                                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                                        )
+                                        Text(
+                                            text = formatPrice(givenAmount),
+                                            style = MaterialTheme.typography.titleLarge,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                }
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                OutlinedButton(
+                                    onClick = {
+                                        givenAmount = totalPrice
+                                        selectedCounts = emptyMap()
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text("Passt genau", textAlign = TextAlign.Center)
+                                }
+                                OutlinedButton(
+                                    onClick = {
+                                        givenAmount = 0.0
+                                        selectedCounts = emptyMap()
+                                    },
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        contentColor = MaterialTheme.colorScheme.error
+                                    ),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text("Zurücksetzen", textAlign = TextAlign.Center)
+                                }
+                            }
+                        }
+
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Card(
+                                colors = CardDefaults.cardColors(
+                                    containerColor = if (isEnough) MaterialTheme.colorScheme.surfaceContainerHigh else MaterialTheme.colorScheme.errorContainer
+                                ),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(12.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = if (isEnough) "Rückgeld:" else "Noch zu zahlen:",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isEnough) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onErrorContainer
+                                    )
+                                    Text(
+                                        text = formatPrice(if (isEnough) change else (totalPrice - givenAmount)),
+                                        style = MaterialTheme.typography.titleLarge,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = if (isEnough) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                                    )
+                                }
+                            }
+
+                            Button(
+                                onClick = {
+                                    onCheckoutNextCustomer()
+                                    onDismiss()
+                                },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.primary,
+                                    contentColor = MaterialTheme.colorScheme.onPrimary
+                                ),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(48.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.PersonAdd,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Nächster Kunde",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -778,10 +1265,10 @@ fun AddItemSquareCard(
 fun CartSection(
     cartItems: List<CartItem>,
     totalPrice: Double,
-    onAddOne: (CartItem) -> Unit,
     onRemoveOne: (CartItem) -> Unit,
     onRemoveEntireLine: (CartItem) -> Unit,
     onCheckoutNextCustomer: () -> Unit,
+    onOpenChangeCalculator: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -839,7 +1326,6 @@ fun CartSection(
                 items(cartItems, key = { it.item.id }) { cartItem ->
                     CartItemRow(
                         cartItem = cartItem,
-                        onAddOne = { onAddOne(cartItem) },
                         onRemoveOne = { onRemoveOne(cartItem) },
                         onRemoveEntireLine = { onRemoveEntireLine(cartItem) }
                     )
@@ -850,6 +1336,12 @@ fun CartSection(
         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
         Card(
+            onClick = {
+                if (cartItems.isNotEmpty()) {
+                    onOpenChangeCalculator()
+                }
+            },
+            enabled = cartItems.isNotEmpty(),
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.secondaryContainer
             ),
@@ -862,12 +1354,21 @@ fun CartSection(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "Gesamtpreis",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f)
-                )
+                Column {
+                    Text(
+                        text = "Gesamtpreis",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f)
+                    )
+                    if (cartItems.isNotEmpty()) {
+                        Text(
+                            text = "Rückgeldrechner",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
                 Text(
                     text = formatPrice(totalPrice),
                     style = MaterialTheme.typography.headlineMedium,
@@ -882,7 +1383,6 @@ fun CartSection(
 @Composable
 fun CartItemRow(
     cartItem: CartItem,
-    onAddOne: () -> Unit,
     onRemoveOne: () -> Unit,
     onRemoveEntireLine: () -> Unit,
     modifier: Modifier = Modifier
@@ -928,39 +1428,38 @@ fun CartItemRow(
 
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(2.dp)
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                IconButton(
+                FilledTonalIconButton(
                     onClick = onRemoveOne,
-                    modifier = Modifier.size(28.dp)
+                    modifier = Modifier
+                        .width(42.dp)
+                        .height(36.dp),
+                    colors = IconButtonDefaults.filledTonalIconButtonColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                    )
                 ) {
                     Icon(
                         imageVector = Icons.Default.Remove,
                         contentDescription = "Ein Stück entfernen",
-                        modifier = Modifier.size(16.dp)
+                        modifier = Modifier.size(20.dp)
                     )
                 }
 
-                IconButton(
-                    onClick = onAddOne,
-                    modifier = Modifier.size(28.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Add,
-                        contentDescription = "Ein Stück hinzufügen",
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
-
-                IconButton(
+                FilledTonalIconButton(
                     onClick = onRemoveEntireLine,
-                    modifier = Modifier.size(28.dp)
+                    modifier = Modifier
+                        .width(42.dp)
+                        .height(36.dp),
+                    colors = IconButtonDefaults.filledTonalIconButtonColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer,
+                        contentColor = MaterialTheme.colorScheme.onErrorContainer
+                    )
                 ) {
                     Icon(
                         imageVector = Icons.Default.Close,
                         contentDescription = "Zeile entfernen",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(16.dp)
+                        modifier = Modifier.size(20.dp)
                     )
                 }
             }
@@ -1161,10 +1660,14 @@ fun StatisticsDialog(
 ) {
     val dailySummaries = getDailySalesSummaries(transactions)
 
-    var showExportDialog by remember { mutableStateOf(false) }
-    var dayForContextMenu by remember { mutableStateOf<DailySalesSummary?>(null) }
-    var dayToEdit by remember { mutableStateOf<DailySalesSummary?>(null) }
-    var dayToDeleteConfirm by remember { mutableStateOf<DailySalesSummary?>(null) }
+    var showExportDialog by rememberSaveable { mutableStateOf(false) }
+    var dayForContextMenuDate by rememberSaveable { mutableStateOf<String?>(null) }
+    var dayToEditDate by rememberSaveable { mutableStateOf<String?>(null) }
+    var dayToDeleteConfirmDate by rememberSaveable { mutableStateOf<String?>(null) }
+
+    val dayForContextMenu = dailySummaries.find { it.dateString == dayForContextMenuDate }
+    val dayToEdit = dailySummaries.find { it.dateString == dayToEditDate }
+    val dayToDeleteConfirm = dailySummaries.find { it.dateString == dayToDeleteConfirmDate }
 
     val context = LocalContext.current
 
@@ -1290,7 +1793,7 @@ fun StatisticsDialog(
                         items(dailySummaries, key = { it.dateString }) { dailySales ->
                             DailySalesCard(
                                 dailySales = dailySales,
-                                onLongClick = { dayForContextMenu = dailySales }
+                                onLongClick = { dayForContextMenuDate = dailySales.dateString }
                             )
                         }
                     }
@@ -1302,7 +1805,7 @@ fun StatisticsDialog(
     // Kontextmenü-Popup für einen einzelnen Tag
     dayForContextMenu?.let { day ->
         AlertDialog(
-            onDismissRequest = { dayForContextMenu = null },
+            onDismissRequest = { dayForContextMenuDate = null },
             title = { Text("Tag: ${day.dateString}", fontWeight = FontWeight.Bold) },
             text = {
                 Text("Tagesumsatz: ${formatPrice(day.dayTotalRevenue)}\n\nWas möchten Sie mit den Daten dieses Tages tun?")
@@ -1310,8 +1813,8 @@ fun StatisticsDialog(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        dayToEdit = day
-                        dayForContextMenu = null
+                        dayToEditDate = day.dateString
+                        dayForContextMenuDate = null
                     }
                 ) {
                     Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -1322,8 +1825,8 @@ fun StatisticsDialog(
             dismissButton = {
                 TextButton(
                     onClick = {
-                        dayToDeleteConfirm = day
-                        dayForContextMenu = null
+                        dayToDeleteConfirmDate = day.dateString
+                        dayForContextMenuDate = null
                     },
                     colors = ButtonDefaults.textButtonColors(contentColor = RedButtonColor)
                 ) {
@@ -1338,14 +1841,14 @@ fun StatisticsDialog(
     // Bestätigung für Tag-Löschen
     dayToDeleteConfirm?.let { day ->
         AlertDialog(
-            onDismissRequest = { dayToDeleteConfirm = null },
+            onDismissRequest = { dayToDeleteConfirmDate = null },
             title = { Text("Tag aus Statistik löschen") },
             text = { Text("Möchten Sie alle Verkäufe vom ${day.dateString} (Tagesumsatz: ${formatPrice(day.dayTotalRevenue)}) wirklich aus der Statistik löschen?") },
             confirmButton = {
                 Button(
                     onClick = {
                         onDeleteDay(day.dateString)
-                        dayToDeleteConfirm = null
+                        dayToDeleteConfirmDate = null
                     },
                     colors = ButtonDefaults.buttonColors(
                         containerColor = RedButtonColor,
@@ -1356,7 +1859,7 @@ fun StatisticsDialog(
                 }
             },
             dismissButton = {
-                OutlinedButton(onClick = { dayToDeleteConfirm = null }) {
+                OutlinedButton(onClick = { dayToDeleteConfirmDate = null }) {
                     Text("Abbrechen")
                 }
             }
@@ -1368,10 +1871,10 @@ fun StatisticsDialog(
         EditDailySalesDialog(
             dailySales = day,
             catalogItems = catalogItems,
-            onDismiss = { dayToEdit = null },
+            onDismiss = { dayToEditDate = null },
             onConfirm = { updatedArticles ->
                 onUpdateDayArticles(day.dateString, updatedArticles)
-                dayToEdit = null
+                dayToEditDate = null
             }
         )
     }
@@ -1546,7 +2049,6 @@ fun EditDailySalesDialog(
 
                 HorizontalDivider()
 
-                // + Artikel Button zwischen der Artikelliste und den Abbrechen/Speichern-Knöpfen
                 Button(
                     onClick = { showAddCatalogItemDialog = true },
                     modifier = Modifier.fillMaxWidth()
@@ -1573,7 +2075,6 @@ fun EditDailySalesDialog(
         }
     )
 
-    // Dialog zur Auswahl eines Artikels aus der Artikel-Datenbank
     if (showAddCatalogItemDialog) {
         AlertDialog(
             onDismissRequest = { showAddCatalogItemDialog = false },

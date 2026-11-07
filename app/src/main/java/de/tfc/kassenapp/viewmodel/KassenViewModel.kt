@@ -222,6 +222,53 @@ class KassenViewModel(application: Application) : AndroidViewModel(application) 
         saveTransactions()
     }
 
+    fun deleteDayFromStatistics(dateString: String) {
+        val dateFormat = java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.GERMAN)
+        transactions.removeAll { tx ->
+            dateFormat.format(java.util.Date(tx.timestamp)) == dateString
+        }
+        saveTransactions()
+    }
+
+    fun updateDayArticlesInStatistics(
+        dateString: String,
+        updatedArticles: List<de.tfc.kassenapp.ui.DailyArticleSummary>
+    ) {
+        val dateFormat = java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.GERMAN)
+
+        val oldDayTransactions = transactions.filter { tx ->
+            dateFormat.format(java.util.Date(tx.timestamp)) == dateString
+        }
+        if (oldDayTransactions.isEmpty()) return
+
+        val sampleTimestamp = oldDayTransactions.first().timestamp
+
+        transactions.removeAll { tx ->
+            dateFormat.format(java.util.Date(tx.timestamp)) == dateString
+        }
+
+        val newTxItems = updatedArticles.map {
+            val unitPrice = if (it.totalQuantity > 0) it.totalRevenue / it.totalQuantity else 0.0
+            TransactionItem(
+                name = it.articleName,
+                price = unitPrice,
+                quantity = it.totalQuantity
+            )
+        }.filter { it.quantity > 0 }
+
+        if (newTxItems.isNotEmpty()) {
+            val newTx = Transaction(
+                timestamp = sampleTimestamp,
+                items = newTxItems,
+                totalAmount = newTxItems.sumOf { it.price * it.quantity }
+            )
+            transactions.add(0, newTx)
+            transactions.sortByDescending { it.timestamp }
+        }
+
+        saveTransactions()
+    }
+
     fun addToCart(item: CatalogItem) {
         val index = cartItems.indexOfFirst { it.item.id == item.id }
         if (index != -1) {

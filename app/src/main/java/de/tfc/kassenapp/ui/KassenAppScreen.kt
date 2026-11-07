@@ -9,6 +9,7 @@ import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import android.widget.Toast
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -21,6 +22,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -454,6 +456,9 @@ fun KassenAppScreen(
         StatisticsDialog(
             transactions = viewModel.transactions,
             totalRevenue = viewModel.totalRevenue,
+            catalogItems = viewModel.catalogItems,
+            onDeleteDay = { dateStr -> viewModel.deleteDayFromStatistics(dateStr) },
+            onUpdateDayArticles = { dateStr, articles -> viewModel.updateDayArticlesInStatistics(dateStr, articles) },
             onDismiss = { showStatisticsDialog = false }
         )
     }
@@ -820,7 +825,7 @@ fun CartSection(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "Warenkorb ist leer\nKlicke oben/links auf einen Artikel",
+                    text = "Warenkorb ist leer\nKlicke auf einen Artikel",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center
@@ -1149,13 +1154,18 @@ fun SideMenuSheet(
 fun StatisticsDialog(
     transactions: List<Transaction>,
     totalRevenue: Double,
+    catalogItems: List<CatalogItem>,
+    onDeleteDay: (dateString: String) -> Unit,
+    onUpdateDayArticles: (dateString: String, articles: List<DailyArticleSummary>) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val dailySummaries = remember(transactions) {
-        getDailySalesSummaries(transactions)
-    }
+    val dailySummaries = getDailySalesSummaries(transactions)
 
     var showExportDialog by remember { mutableStateOf(false) }
+    var dayForContextMenu by remember { mutableStateOf<DailySalesSummary?>(null) }
+    var dayToEdit by remember { mutableStateOf<DailySalesSummary?>(null) }
+    var dayToDeleteConfirm by remember { mutableStateOf<DailySalesSummary?>(null) }
+
     val context = LocalContext.current
 
     Dialog(
@@ -1278,12 +1288,92 @@ fun StatisticsDialog(
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         items(dailySummaries, key = { it.dateString }) { dailySales ->
-                            DailySalesCard(dailySales = dailySales)
+                            DailySalesCard(
+                                dailySales = dailySales,
+                                onLongClick = { dayForContextMenu = dailySales }
+                            )
                         }
                     }
                 }
             }
         }
+    }
+
+    // Kontextmenü-Popup für einen einzelnen Tag
+    dayForContextMenu?.let { day ->
+        AlertDialog(
+            onDismissRequest = { dayForContextMenu = null },
+            title = { Text("Tag: ${day.dateString}", fontWeight = FontWeight.Bold) },
+            text = {
+                Text("Tagesumsatz: ${formatPrice(day.dayTotalRevenue)}\n\nWas möchten Sie mit den Daten dieses Tages tun?")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        dayToEdit = day
+                        dayForContextMenu = null
+                    }
+                ) {
+                    Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Bearbeiten")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        dayToDeleteConfirm = day
+                        dayForContextMenu = null
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = RedButtonColor)
+                ) {
+                    Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Tag löschen")
+                }
+            }
+        )
+    }
+
+    // Bestätigung für Tag-Löschen
+    dayToDeleteConfirm?.let { day ->
+        AlertDialog(
+            onDismissRequest = { dayToDeleteConfirm = null },
+            title = { Text("Tag aus Statistik löschen") },
+            text = { Text("Möchten Sie alle Verkäufe vom ${day.dateString} (Tagesumsatz: ${formatPrice(day.dayTotalRevenue)}) wirklich aus der Statistik löschen?") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onDeleteDay(day.dateString)
+                        dayToDeleteConfirm = null
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = RedButtonColor,
+                        contentColor = RedButtonTextColor
+                    )
+                ) {
+                    Text("Tag löschen", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { dayToDeleteConfirm = null }) {
+                    Text("Abbrechen")
+                }
+            }
+        )
+    }
+
+    // Tag bearbeiten Dialog
+    dayToEdit?.let { day ->
+        EditDailySalesDialog(
+            dailySales = day,
+            catalogItems = catalogItems,
+            onDismiss = { dayToEdit = null },
+            onConfirm = { updatedArticles ->
+                onUpdateDayArticles(day.dateString, updatedArticles)
+                dayToEdit = null
+            }
+        )
     }
 
     if (showExportDialog) {
@@ -1304,6 +1394,250 @@ fun StatisticsDialog(
                         "Fehler beim Exportieren der Datei.",
                         Toast.LENGTH_SHORT
                     ).show()
+                }
+            }
+        )
+    }
+}
+
+@Composable
+fun EditDailySalesDialog(
+    dailySales: DailySalesSummary,
+    catalogItems: List<CatalogItem>,
+    onDismiss: () -> Unit,
+    onConfirm: (List<DailyArticleSummary>) -> Unit
+) {
+    var editedArticles by remember {
+        mutableStateOf(dailySales.articles.map { it.copy() })
+    }
+    var showAddCatalogItemDialog by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Verkäufe am ${dailySales.dateString} bearbeiten", fontWeight = FontWeight.Bold) },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 420.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = "Verkaufte Artikel für diesen Tag:",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                HorizontalDivider()
+
+                if (editedArticles.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "Keine Artikel für diesen Tag eingetragen.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                } else {
+                    LazyColumn(
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        items(editedArticles, key = { it.articleName }) { article ->
+                            Card(
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surface
+                                ),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = article.articleName,
+                                            fontWeight = FontWeight.Bold,
+                                            style = MaterialTheme.typography.bodyMedium
+                                        )
+                                        Text(
+                                            text = "${formatPrice(article.totalRevenue)} gesamt",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        IconButton(
+                                            onClick = {
+                                                val unitPrice = if (article.totalQuantity > 0) article.totalRevenue / article.totalQuantity else 0.0
+                                                val newQty = article.totalQuantity - 1
+                                                if (newQty <= 0) {
+                                                    editedArticles = editedArticles.filter { it.articleName != article.articleName }
+                                                } else {
+                                                    editedArticles = editedArticles.map {
+                                                        if (it.articleName == article.articleName) {
+                                                            it.copy(totalQuantity = newQty, totalRevenue = unitPrice * newQty)
+                                                        } else it
+                                                    }
+                                                }
+                                            },
+                                            modifier = Modifier.size(28.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Remove,
+                                                contentDescription = "Ein Stück verringern",
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+
+                                        Text(
+                                            text = "${article.totalQuantity}x",
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.padding(horizontal = 4.dp)
+                                        )
+
+                                        IconButton(
+                                            onClick = {
+                                                val unitPrice = if (article.totalQuantity > 0) article.totalRevenue / article.totalQuantity else 0.0
+                                                val newQty = article.totalQuantity + 1
+                                                editedArticles = editedArticles.map {
+                                                    if (it.articleName == article.articleName) {
+                                                        it.copy(totalQuantity = newQty, totalRevenue = unitPrice * newQty)
+                                                    } else it
+                                                }
+                                            },
+                                            modifier = Modifier.size(28.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Add,
+                                                contentDescription = "Ein Stück hinzufügen",
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+
+                                        IconButton(
+                                            onClick = {
+                                                editedArticles = editedArticles.filter { it.articleName != article.articleName }
+                                            },
+                                            modifier = Modifier.size(28.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Close,
+                                                contentDescription = "Artikel entfernen",
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                HorizontalDivider()
+
+                // + Artikel Button zwischen der Artikelliste und den Abbrechen/Speichern-Knöpfen
+                Button(
+                    onClick = { showAddCatalogItemDialog = true },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("+ Artikel hinzufügen", fontWeight = FontWeight.Bold)
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    onConfirm(editedArticles)
+                }
+            ) {
+                Text("Speichern")
+            }
+        },
+        dismissButton = {
+            OutlinedButton(onClick = onDismiss) {
+                Text("Abbrechen")
+            }
+        }
+    )
+
+    // Dialog zur Auswahl eines Artikels aus der Artikel-Datenbank
+    if (showAddCatalogItemDialog) {
+        AlertDialog(
+            onDismissRequest = { showAddCatalogItemDialog = false },
+            title = { Text("Artikel auswählen", fontWeight = FontWeight.Bold) },
+            text = {
+                if (catalogItems.isEmpty()) {
+                    Text("Keine Artikel in der Artikel-Datenbank vorhanden. Bitte legen Sie zuerst Artikel an.")
+                } else {
+                    LazyColumn(
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 280.dp)
+                    ) {
+                        items(catalogItems, key = { it.id }) { catItem ->
+                            OutlinedCard(
+                                onClick = {
+                                    val existing = editedArticles.find { it.articleName == catItem.name }
+                                    if (existing != null) {
+                                        val unitPrice = catItem.price
+                                        val newQty = existing.totalQuantity + 1
+                                        editedArticles = editedArticles.map {
+                                            if (it.articleName == catItem.name) {
+                                                it.copy(totalQuantity = newQty, totalRevenue = unitPrice * newQty)
+                                            } else it
+                                        }
+                                    } else {
+                                        editedArticles = editedArticles + DailyArticleSummary(
+                                            articleName = catItem.name,
+                                            totalQuantity = 1,
+                                            totalRevenue = catItem.price
+                                        )
+                                    }
+                                    showAddCatalogItemDialog = false
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(12.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = catItem.name,
+                                        fontWeight = FontWeight.Bold,
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                    Text(
+                                        text = formatPrice(catItem.price),
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                OutlinedButton(onClick = { showAddCatalogItemDialog = false }) {
+                    Text("Abbrechen")
                 }
             }
         )
@@ -1407,14 +1741,24 @@ fun ExportDialog(
     )
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun DailySalesCard(dailySales: DailySalesSummary) {
+fun DailySalesCard(
+    dailySales: DailySalesSummary,
+    onLongClick: () -> Unit
+) {
     Card(
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .combinedClickable(
+                onClick = {},
+                onLongClick = onLongClick
+            )
     ) {
         Column(
             modifier = Modifier

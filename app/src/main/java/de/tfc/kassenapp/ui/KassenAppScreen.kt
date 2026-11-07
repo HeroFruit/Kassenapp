@@ -782,7 +782,7 @@ fun ChangeCalculatorDialog(
                         )
 
                         LazyVerticalGrid(
-                            columns = GridCells.Adaptive(minSize = 85.dp),
+                            columns = GridCells.Fixed(3),
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                             modifier = Modifier.fillMaxWidth()
@@ -910,7 +910,7 @@ fun ChangeCalculatorDialog(
                         )
 
                         LazyVerticalGrid(
-                            columns = GridCells.Adaptive(minSize = 80.dp),
+                            columns = GridCells.Fixed(3),
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                             verticalArrangement = Arrangement.spacedBy(6.dp),
                             modifier = Modifier.fillMaxSize()

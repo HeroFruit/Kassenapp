@@ -803,9 +803,11 @@ fun ChangeCalculatorDialog(
                                     Box(modifier = Modifier.fillMaxSize()) {
                                         Text(
                                             text = label,
-                                            style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = FontWeight.Bold,
+                                            style = MaterialTheme.typography.titleLarge.copy(fontSize = 40.sp),
+                                            fontWeight = FontWeight.ExtraBold,
                                             textAlign = TextAlign.Center,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
                                             modifier = Modifier.align(Alignment.Center)
                                         )
 
@@ -931,9 +933,11 @@ fun ChangeCalculatorDialog(
                                     Box(modifier = Modifier.fillMaxSize()) {
                                         Text(
                                             text = label,
-                                            style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = FontWeight.Bold,
+                                            style = MaterialTheme.typography.titleLarge.copy(fontSize = 45.sp),
+                                            fontWeight = FontWeight.ExtraBold,
                                             textAlign = TextAlign.Center,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
                                             modifier = Modifier.align(Alignment.Center)
                                         )
 

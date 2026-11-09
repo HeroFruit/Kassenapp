@@ -16,6 +16,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -800,14 +801,17 @@ fun ChangeCalculatorDialog(
                                     shape = RoundedCornerShape(12.dp),
                                     modifier = Modifier.aspectRatio(1.2f)
                                 ) {
-                                    Box(modifier = Modifier.fillMaxSize()) {
+                                    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                                        val cardHeight = maxHeight.value
+                                        val dynamicFontSize = (cardHeight * 0.32f).sp
+                                        val dynamicBadgeFontSize = (cardHeight * 0.18f).sp
+
                                         Text(
                                             text = label,
-                                            style = MaterialTheme.typography.titleLarge.copy(fontSize = 40.sp),
+                                            fontSize = dynamicFontSize,
                                             fontWeight = FontWeight.ExtraBold,
                                             textAlign = TextAlign.Center,
                                             maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
                                             modifier = Modifier.align(Alignment.Center)
                                         )
 
@@ -820,7 +824,7 @@ fun ChangeCalculatorDialog(
                                                 Text(
                                                     text = "${count}x",
                                                     color = MaterialTheme.colorScheme.onPrimary,
-                                                    style = MaterialTheme.typography.labelMedium,
+                                                    fontSize = dynamicBadgeFontSize,
                                                     fontWeight = FontWeight.ExtraBold,
                                                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                                 )
@@ -930,14 +934,17 @@ fun ChangeCalculatorDialog(
                                     shape = RoundedCornerShape(10.dp),
                                     modifier = Modifier.aspectRatio(1.2f)
                                 ) {
-                                    Box(modifier = Modifier.fillMaxSize()) {
+                                    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                                        val cardHeight = maxHeight.value
+                                        val dynamicFontSize = (cardHeight * 0.32f).sp
+                                        val dynamicBadgeFontSize = (cardHeight * 0.18f).sp
+
                                         Text(
                                             text = label,
-                                            style = MaterialTheme.typography.titleLarge.copy(fontSize = 45.sp),
+                                            fontSize = dynamicFontSize,
                                             fontWeight = FontWeight.ExtraBold,
                                             textAlign = TextAlign.Center,
                                             maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
                                             modifier = Modifier.align(Alignment.Center)
                                         )
 
@@ -950,7 +957,7 @@ fun ChangeCalculatorDialog(
                                                 Text(
                                                     text = "${count}x",
                                                     color = MaterialTheme.colorScheme.onPrimary,
-                                                    style = MaterialTheme.typography.labelMedium,
+                                                    fontSize = dynamicBadgeFontSize,
                                                     fontWeight = FontWeight.ExtraBold,
                                                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                                 )
